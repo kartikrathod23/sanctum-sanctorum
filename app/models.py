@@ -94,11 +94,21 @@ class Loan(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     member_id: Mapped[int] = mapped_column(ForeignKey("members.id"), index=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id"), index=True)
-    borrowed_at: Mapped[datetime] = mapped_column(DateTime)
+    # borrowed_at: Mapped[datetime] = mapped_column(DateTime)
     # TODO: the loan model is incomplete. Still missing (see SPEC.md, "Loans"):
     #   - due_at: when the book must be back (borrowed_at + 14 days)
     #   - returned_at: nullable, set when the book is returned
     #   - late_fee_cents: charged on return, defaults to 0
+    borrowed_at: Mapped[datetime] = mapped_column(DateTime)
+    due_at: Mapped[datetime] = mapped_column(DateTime)
+    returned_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+    late_fee_cents: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+    )
 
     member: Mapped[Member] = relationship(back_populates="loans")
     book: Mapped[Book] = relationship()

@@ -134,7 +134,12 @@ class MemberOut(BaseModel):
     email: str
     tier: str
     created_at: datetime
-
+    
+class MemberPage(BaseModel):
+    items: List[MemberOut]
+    total: int
+    limit: int
+    offset: int
 
 class MemberStats(BaseModel):
     member_id: int

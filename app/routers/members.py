@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends,  Query
 from sqlalchemy.orm import Session
 
 from app.clock import get_now
 from app.db import get_db
-from app.schemas import LoanOut, LoanStatus, MemberCreate, MemberOut, MemberStats, OrderOut
+from app.schemas import LoanOut, LoanStatus, MemberCreate, MemberOut, MemberPage, MemberStats, OrderOut
 from app.services import loans as loan_service
 from app.services import members as service
 
@@ -17,6 +17,13 @@ router = APIRouter(prefix="/members", tags=["members"])
 def create_member(data: MemberCreate, db: Session = Depends(get_db), now: datetime = Depends(get_now)):
     return service.create_member(db, data, now)
 
+@router.get("", response_model=MemberPage)
+def list_members(limit: int = Query(20, ge=1, le=100),offset: int = Query(0, ge=0),db: Session = Depends(get_db)):
+    return service.list_members(
+        db,
+        limit=limit,
+        offset=offset,
+    )
 
 @router.get("/{member_id}", response_model=MemberOut)
 def get_member(member_id: int, db: Session = Depends(get_db)):

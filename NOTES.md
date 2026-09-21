@@ -37,6 +37,7 @@ I completed the required bookstore functionality across books, members, orders, 
 - Implemented member order listing.
 - Implemented member statistics.
 - Implemented tier-based behaviour used by orders and loans.
+- Added pagination support for `GET /members`.
 
 ### Orders
 
@@ -51,8 +52,8 @@ I completed the required bookstore functionality across books, members, orders, 
 - Implemented payment.
 - Implemented cancellation and stock restoration.
 - Preserved the submitted order item order.
-
-A failed order does not partially reserve stock.
+- Added concurrency protection when multiple orders try to purchase the last available copy of a book.
+- A failed order does not partially reserve stock.
 
 ### Loans
 
@@ -86,6 +87,7 @@ I added separate edge-case tests for cases that are easy to get wrong, including
 - Late fees using the current book price when a book is returned.
 - Overdue loans that have not yet been returned having no recorded late fee.
 - Reports using the current book title.
+- Concurrent orders competing for the last available copy of a book.
 
 The existing acceptance tests were kept intact; the additional cases were added separately.
 
@@ -121,6 +123,7 @@ SQLAlchemy relationships rather than duplicating lookup logic across the applica
 ### Current time
 
 All business logic that depends on the current time uses the existing `get_now` dependency.
+
 I did not use direct `datetime.now()` calls for business rules, so the application's time-based
 behaviour remains compatible with the frozen clock used by the test suite.
 
@@ -161,6 +164,7 @@ The application creates the required tables on startup and seeds the demo data w
 database is empty.
 
 For this assignment, I kept this approach instead of introducing a migration framework.
+
 For a larger production application with an evolving schema, I would use explicit database
 migrations such as Alembic.
 
@@ -171,6 +175,7 @@ migrations such as Alembic.
 ### One Render service instead of separate frontend and backend deployments
 
 The frontend is already a static frontend served by FastAPI and uses relative API URLs.
+
 Keeping them together made the deployment simpler and avoided unnecessary cross-origin
 configuration.
 
@@ -187,15 +192,21 @@ network access or external services, which is also required by the assignment.
 ### Startup table creation instead of migrations
 
 `Base.metadata.create_all()` is sufficient for this assignment and keeps the setup simple.
+
 For a real production system with schema changes over time, migrations would be a better
 choice.
 
 ### Transaction and stock handling
 
 Order creation validates all books, permissions, and stock before making stock changes.
+
 This prevents a failed multi-book order from leaving some books reserved and others unchanged.
 
-The implementation focuses on the behaviour required by the assignment rather than introducing
+For concurrent orders, stock reservation uses an atomic database update that only succeeds
+when enough stock is still available. This prevents two simultaneous orders from consuming
+the same last copy.
+
+The implementation focuses on the behaviour required by the assignment without introducing
 a larger inventory or distributed locking system.
 
 ---
@@ -204,15 +215,14 @@ a larger inventory or distributed locking system.
 
 All required features from the specification were implemented.
 
-The following optional extras from the assignment were not implemented:
+I also completed all three optional extras from the assignment:
 
-- Concurrency protection for two simultaneous orders trying to purchase the last copy of a book.
-- A paginated `GET /members` endpoint.
+- Added additional edge-case tests.
+- Added concurrency protection for two simultaneous orders trying to purchase the last copy
+  of a book.
+- Added pagination support for `GET /members`.
 
-I did implement the optional extra of adding additional edge-case tests.
-
-These were intentionally left out because they were optional and the existing application
-does not require the additional complexity for the assignment's normal request flow.
+There are no required or optional assignment features remaining incomplete.
 
 ---
 
@@ -235,7 +245,8 @@ while changing only the database backend from the default SQLite database to Pos
 
 The application was tested locally using the project's `uv` workflow.
 
-The test suite includes the original acceptance tests along with additional edge-case coverage.
+The test suite includes the original acceptance tests along with additional edge-case and
+concurrency coverage. All tests pass successfully.
 
 The deployed application was also tested manually through the public Render URL, including:
 
@@ -243,8 +254,10 @@ The deployed application was also tested manually through the public Render URL,
 - Catalog loading.
 - Book search, filtering, sorting, and pagination.
 - Member creation and sign-in.
+- Member pagination.
 - Order creation.
 - Stock reduction after ordering.
+- Concurrent orders competing for the last available copy.
 - Order payment.
 - Order cancellation and stock restoration.
 - Persistence after refreshing the application.
@@ -277,6 +290,7 @@ I reviewed and tested the generated suggestions before keeping them in the proje
 One example where I had to verify and override an AI suggestion was during the PostgreSQL
 deployment. An initially used Supabase pooler hostname did not match the actual connection
 details for the project and caused the deployed service to fail to connect to PostgreSQL.
+
 I checked the connection details provided by Supabase and replaced it with the actual Session
 Pooler hostname before continuing.
 

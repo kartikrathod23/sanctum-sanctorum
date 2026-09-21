@@ -48,11 +48,7 @@ def to_loan_out(loan: Loan, now: datetime) -> LoanOut:
     )
 
 
-def calculate_late_fee(
-    due_at: datetime,
-    returned_at: datetime,
-    price_cents: int,
-) -> int:
+def calculate_late_fee(due_at: datetime,returned_at: datetime,price_cents: int,) -> int:
     """Calculate late fee at 25 cents per started late day, capped by book price."""
     if returned_at <= due_at:
         return 0
@@ -185,12 +181,7 @@ def return_loan(db: Session, loan_id: int, now: datetime) -> LoanOut:
     return to_loan_out(loan, now)
 
 
-def list_member_loans(
-    db: Session,
-    member_id: int,
-    now: datetime,
-    status: Optional[LoanStatus] = None,
-) -> List[LoanOut]:
+def list_member_loans(db: Session,member_id: int,now: datetime,status: Optional[LoanStatus] = None,) -> List[LoanOut]:
     """List a member's loans ordered by id."""
     member = db.get(Member, member_id)
 

@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Dict
 
 from fastapi import HTTPException
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models import Book, Member, MemberTier, Order, OrderItem, OrderStatus
@@ -33,6 +34,30 @@ def calculate_discount_percent(member: Member, total_quantity: int) -> int:
     return discount
 
 
+def reserve_stock(db: Session, book_id: int, quantity: int) -> None:
+    """Atomically reserve stock for a book.
+
+    The stock check and decrement happen in one database operation.
+    This prevents two concurrent orders from reserving the same last copy.
+    """
+    result = db.execute(
+        update(Book)
+        .where(
+            Book.id == book_id,
+            Book.stock >= quantity,
+        )
+        .values(
+            stock=Book.stock - quantity,
+        )
+    )
+
+    if result.rowcount != 1:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Insufficient stock for book {book_id}",
+        )
+
+
 def create_order(db: Session, data: OrderCreate, now: datetime) -> Order:
     """Place a pending order and reserve stock.
 
@@ -41,17 +66,8 @@ def create_order(db: Session, data: OrderCreate, now: datetime) -> Order:
     2. Member and all books must exist.
     3. Restricted books require master or higher.
     4. Every book must have sufficient stock.
-    5. Only then are stock and order data changed.
+    5. Stock is reserved atomically before the order is committed.
     """
-    
-    # TODO:
-    # 1. Load the member (404) and every book (404).
-    # 2. If any book is restricted, check the member's tier (403).
-    # 3. Check stock for every item before changing anything (409).
-    # 4. Decrement stock and build OrderItems with the current price as unit_price_cents.
-    # 5. Compute subtotal, discount_percent (calculate_discount_percent), discount_cents, total.
-    # 6. Save the pending Order with created_at = now and return it.
-    
     
     # 1. Member must exist.
     member = db.get(Member, data.member_id)
@@ -88,7 +104,6 @@ def create_order(db: Session, data: OrderCreate, now: datetime) -> Order:
             ensure_can_access_restricted(member)
 
     # 4. Check ALL stock before modifying ANY stock.
-    # This gives us the required all-or-nothing behavior.
     for item in data.items:
         book = books[item.book_id]
 
@@ -130,11 +145,21 @@ def create_order(db: Session, data: OrderCreate, now: datetime) -> Order:
 
     total_cents = subtotal_cents - discount_cents
 
-    # 6. Reserve stock.
+    # 6. Reserve stock atomically.
+    # This conditional UPDATE is the concurrency protection: if another
+    # transaction has consumed the remaining stock since that check,
+    # the UPDATE affects zero rows and the whole transaction is rolled back.
 
-    for item in data.items:
-        book = books[item.book_id]
-        book.stock -= item.quantity
+    try:
+        for item in data.items:
+            reserve_stock(
+                db,
+                book_id=item.book_id,
+                quantity=item.quantity,
+            )
+    except HTTPException:
+        db.rollback()
+        raise
 
     # 7. Create the order.
 
